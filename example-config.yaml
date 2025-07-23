@@ -1,0 +1,28 @@
+app: my-awesome-app
+version: 2.1.0
+environment: development
+
+database:
+  host: db.example.com
+  port: 5432
+  name: myapp_dev
+  ssl: true
+
+redis:
+  host: redis.example.com
+  port: 6379
+  db: 0
+
+logging:
+  level: debug
+  format: json
+  
+features:
+  new_ui: true
+  beta_features: false
+  analytics: enabled
+
+secrets:
+  # These would normally come from a secret store
+  api_key: "placeholder-key"
+  jwt_secret: "placeholder-secret"

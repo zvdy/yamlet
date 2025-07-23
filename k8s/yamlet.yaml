@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: yamlet
+  namespace: default
+  labels:
+    app: yamlet
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: yamlet
+  template:
+    metadata:
+      labels:
+        app: yamlet
+    spec:
+      containers:
+      - name: yamlet
+        image: yamlet:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        env:
+        - name: PORT
+          value: "8080"
+        - name: USE_FILES
+          value: "true"
+        - name: DATA_DIR
+          value: "/data"
+        - name: YAMLET_TOKENS
+          value: "devtoken123:dev,stagingtoken456:staging,prodtoken789:production,testtoken000:test"
+        volumeMounts:
+        - name: data-volume
+          mountPath: /data
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+      volumes:
+      - name: data-volume
+        persistentVolumeClaim:
+          claimName: yamlet-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: yamlet-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: yamlet-service
+  namespace: default
+  labels:
+    app: yamlet
+spec:
+  type: NodePort
+  ports:
+  - port: 8080
+    targetPort: 8080
+    nodePort: 30080
+    protocol: TCP
+  selector:
+    app: yamlet
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: yamlet-config
+  namespace: default
+data:
+  tokens.env: |
+    YAMLET_TOKENS=devtoken123:dev,stagingtoken456:staging,prodtoken789:production,testtoken000:test
