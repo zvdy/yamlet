@@ -29,8 +29,10 @@ spec:
           value: "false"  # Use memory storage in Minikube for simplicity
         - name: DATA_DIR
           value: "/data"
+        - name: YAMLET_ADMIN_TOKEN
+          value: "minikube-admin-token-123"
         - name: YAMLET_TOKENS
-          value: "devtoken123:dev,stagingtoken456:staging,prodtoken789:production,testtoken000:test"
+          value: "dev-token:dev,test-token:test"
         resources:
           requests:
             memory: "32Mi"
@@ -76,4 +78,5 @@ metadata:
   namespace: default
 data:
   tokens.env: |
-    YAMLET_TOKENS=devtoken123:dev,stagingtoken456:staging,prodtoken789:production,testtoken000:test
+    YAMLET_ADMIN_TOKEN=minikube-admin-token-123
+    YAMLET_TOKENS=dev-token:dev,test-token:test

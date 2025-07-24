@@ -55,6 +55,12 @@ func main() {
 	api.HandleFunc("/{namespace}/configs/{name}", h.DeleteConfig).Methods("DELETE")
 	api.HandleFunc("/{namespace}/configs", h.ListConfigs).Methods("GET")
 
+	// Admin routes for token management
+	admin := r.PathPrefix("/admin").Subrouter()
+	admin.HandleFunc("/tokens", h.CreateToken).Methods("POST")
+	admin.HandleFunc("/tokens", h.ListTokens).Methods("GET")
+	admin.HandleFunc("/tokens/{token}", h.RevokeToken).Methods("DELETE")
+
 	// Start server
 	addr := fmt.Sprintf(":%d", *port)
 	log.Printf("Starting Yamlet server on %s", addr)

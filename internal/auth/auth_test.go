@@ -8,8 +8,8 @@ import (
 func TestTokenAuth(t *testing.T) {
 	auth := NewTokenAuth()
 
-	// Test default tokens
-	err := auth.ValidateToken("dev", "devtoken123")
+	// Test default tokens (updated for new system)
+	err := auth.ValidateToken("dev", "dev-token")
 	if err != nil {
 		t.Fatalf("Expected valid token: %v", err)
 	}
@@ -21,13 +21,13 @@ func TestTokenAuth(t *testing.T) {
 	}
 
 	// Test wrong namespace
-	err = auth.ValidateToken("prod", "devtoken123")
+	err = auth.ValidateToken("production", "dev-token")
 	if err == nil {
 		t.Fatal("Expected namespace mismatch error")
 	}
 
 	// Test bearer prefix
-	err = auth.ValidateToken("dev", "Bearer devtoken123")
+	err = auth.ValidateToken("dev", "Bearer dev-token")
 	if err != nil {
 		t.Fatalf("Expected bearer token to work: %v", err)
 	}
@@ -55,7 +55,7 @@ func TestTokenAuthFromEnv(t *testing.T) {
 func TestGetNamespaceForToken(t *testing.T) {
 	auth := NewTokenAuth()
 
-	namespace, err := auth.GetNamespaceForToken("devtoken123")
+	namespace, err := auth.GetNamespaceForToken("dev-token")
 	if err != nil {
 		t.Fatalf("Failed to get namespace: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestGetNamespaceForToken(t *testing.T) {
 	}
 
 	// Test with Bearer prefix
-	namespace, err = auth.GetNamespaceForToken("Bearer devtoken123")
+	namespace, err = auth.GetNamespaceForToken("Bearer dev-token")
 	if err != nil {
 		t.Fatalf("Failed to get namespace with Bearer: %v", err)
 	}
@@ -92,5 +92,59 @@ func TestAddRemoveToken(t *testing.T) {
 	err = auth.ValidateToken("newnamespace", "newtoken")
 	if err == nil {
 		t.Fatal("Token should have been removed")
+	}
+}
+
+// Test admin functionality
+func TestAdminTokenManagement(t *testing.T) {
+	auth := NewTokenAuth()
+
+	// Test admin token recognition
+	if !auth.IsAdminToken("admin-secret-token-change-me") {
+		t.Fatal("Default admin token should be recognized")
+	}
+
+	if auth.IsAdminToken("dev-token") {
+		t.Fatal("Regular token should not be admin")
+	}
+
+	// Test creating new token
+	err := auth.CreateToken("admin-secret-token-change-me", "new-prod-token", "production")
+	if err != nil {
+		t.Fatalf("Failed to create token: %v", err)
+	}
+
+	// Test new token works
+	err = auth.ValidateToken("production", "new-prod-token")
+	if err != nil {
+		t.Fatalf("New token should work: %v", err)
+	}
+
+	// Test non-admin cannot create tokens
+	err = auth.CreateToken("dev-token", "hacker-token", "evil")
+	if err == nil {
+		t.Fatal("Non-admin should not be able to create tokens")
+	}
+
+	// Test listing tokens
+	tokens, err := auth.ListAllTokens("admin-secret-token-change-me")
+	if err != nil {
+		t.Fatalf("Failed to list tokens: %v", err)
+	}
+
+	if _, exists := tokens["new-prod-token"]; !exists {
+		t.Fatal("New token should appear in list")
+	}
+
+	// Test revoking token
+	err = auth.RevokeToken("admin-secret-token-change-me", "new-prod-token")
+	if err != nil {
+		t.Fatalf("Failed to revoke token: %v", err)
+	}
+
+	// Test revoked token no longer works
+	err = auth.ValidateToken("production", "new-prod-token")
+	if err == nil {
+		t.Fatal("Revoked token should not work")
 	}
 }

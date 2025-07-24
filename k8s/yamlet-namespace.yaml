@@ -1,0 +1,99 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: yamlet
+  labels:
+    name: yamlet
+    app: yamlet
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: yamlet
+  namespace: yamlet
+  labels:
+    app: yamlet
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: yamlet
+  template:
+    metadata:
+      labels:
+        app: yamlet
+    spec:
+      containers:
+      - name: yamlet
+        image: yamlet:latest
+        imagePullPolicy: Never  # Use local image in Minikube
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: PORT
+          value: "8080"
+        - name: USE_FILES
+          value: "false"  # Use memory storage in Minikube for simplicity
+        - name: DATA_DIR
+          value: "/data"
+        - name: YAMLET_ADMIN_TOKEN
+          value: "minikube-admin-token-123"
+        - name: YAMLET_TOKENS
+          value: "dev-token:dev,test-token:test"
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "50m"
+          limits:
+            memory: "64Mi"
+            cpu: "100m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: yamlet-service
+  namespace: yamlet
+  labels:
+    app: yamlet
+spec:
+  type: NodePort
+  ports:
+  - port: 8080
+    targetPort: 8080
+    nodePort: 30080
+    protocol: TCP
+    name: http
+  selector:
+    app: yamlet
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: yamlet-config
+  namespace: yamlet
+data:
+  tokens.env: |
+    YAMLET_ADMIN_TOKEN=minikube-admin-token-123
+    YAMLET_TOKENS=dev-token:dev,test-token:test
+---
+# Service Account for Yamlet (if needed for future RBAC)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: yamlet
+  namespace: yamlet
+  labels:
+    app: yamlet

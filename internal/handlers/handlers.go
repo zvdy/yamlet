@@ -210,3 +210,106 @@ func (h *Handler) ListConfigs(w http.ResponseWriter, r *http.Request) {
 		"count":     len(configs),
 	})
 }
+
+// Admin endpoints for token management
+
+// CreateToken handles POST /admin/tokens
+func (h *Handler) CreateToken(w http.ResponseWriter, r *http.Request) {
+	// Extract admin token
+	adminToken := h.extractToken(r)
+	if adminToken == "" {
+		http.Error(w, "Admin token required", http.StatusUnauthorized)
+		return
+	}
+
+	// Parse request body
+	var req struct {
+		Token     string `json:"token"`
+		Namespace string `json:"namespace"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	// Create the token
+	if err := h.auth.CreateToken(adminToken, req.Token, req.Namespace); err != nil {
+		if strings.Contains(err.Error(), "admin token required") {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+		} else {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+		return
+	}
+
+	log.Printf("Admin created token for namespace %s", req.Namespace)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message":   "Token created successfully",
+		"token":     req.Token,
+		"namespace": req.Namespace,
+	})
+}
+
+// RevokeToken handles DELETE /admin/tokens/{token}
+func (h *Handler) RevokeToken(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	tokenToRevoke := vars["token"]
+
+	// Extract admin token
+	adminToken := h.extractToken(r)
+	if adminToken == "" {
+		http.Error(w, "Admin token required", http.StatusUnauthorized)
+		return
+	}
+
+	// Revoke the token
+	if err := h.auth.RevokeToken(adminToken, tokenToRevoke); err != nil {
+		if strings.Contains(err.Error(), "admin token required") {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+		} else if strings.Contains(err.Error(), "not found") {
+			http.Error(w, err.Error(), http.StatusNotFound)
+		} else {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+		return
+	}
+
+	log.Printf("Admin revoked token: %s", tokenToRevoke)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message": "Token revoked successfully",
+		"token":   tokenToRevoke,
+	})
+}
+
+// ListTokens handles GET /admin/tokens
+func (h *Handler) ListTokens(w http.ResponseWriter, r *http.Request) {
+	// Extract admin token
+	adminToken := h.extractToken(r)
+	if adminToken == "" {
+		http.Error(w, "Admin token required", http.StatusUnauthorized)
+		return
+	}
+
+	// List all tokens
+	tokens, err := h.auth.ListAllTokens(adminToken)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	log.Printf("Admin listed %d tokens", len(tokens))
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"tokens": tokens,
+		"count":  len(tokens),
+	})
+}
