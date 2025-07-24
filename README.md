@@ -55,7 +55,20 @@ go build -o yamlet ./cmd/yamlet
 
 ## 📋 API Reference
 
-### 🔑 Authentication
+### � OpenAPI Specification
+
+A complete OpenAPI 3.0 specification is available at [`openapi.yaml`](./openapi.yaml). This includes:
+- Complete endpoint documentation
+- Request/response schemas
+- Authentication details
+- Interactive examples
+
+You can use this spec with tools like:
+- [Swagger UI](https://swagger.io/tools/swagger-ui/) for interactive documentation
+- [Postman](https://www.postman.com/) for API testing
+- Code generation tools for client libraries
+
+### �🔑 Authentication
 
 All API requests require a bearer token:
 ```
@@ -136,6 +149,13 @@ curl http://localhost:8080/health
 | `test-token` | `test` | Testing environment |
 
 **⚠️ Important**: Change the admin token in production via `YAMLET_ADMIN_TOKEN` environment variable.
+
+## 📖 Documentation
+
+For comprehensive API documentation:
+- **OpenAPI Specification**: [`openapi.yaml`](./openapi.yaml) - Complete API spec
+- **Interactive Docs**: [`docs/`](./docs/) - Tools and guides for viewing API documentation
+- **Examples**: [`examples/`](./examples/) - Sample applications and usage patterns
 
 ## 🏗️ Architecture & Examples
 

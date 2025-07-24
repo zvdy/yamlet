@@ -1,0 +1,576 @@
+openapi: 3.0.1
+info:
+  title: Yamlet API
+  description: |
+    A lightweight, distributed key-value store for YAML configuration files in Kubernetes environments.
+    
+    Yamlet provides secure, namespace-isolated YAML configuration storage with token-based authentication 
+    and runtime token management.
+    
+    ## Authentication
+    
+    All API requests require a Bearer token in the Authorization header:
+    ```
+    Authorization: Bearer <token>
+    ```
+    
+    ## Default Tokens
+    | Token       | Namespace | Purpose                 |
+    |-------------|-----------|-------------------------|
+    | `dev-token` | `dev`     | Development environment |
+    | `test-token`| `test`    | Testing environment     |
+
+    ## Admin Operations
+    
+    Administrative operations require the admin token (default: `admin-secret-token-change-me`).
+    Change this in production via the `YAMLET_ADMIN_TOKEN` environment variable.
+    
+  version: 0.0.1
+  contact:
+    name: Yamlet API Support
+    url: https://github.com/zvdy/yamlet
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  x-logo:
+    url: https://i.imgur.com/L7Pn0Pn.png
+    altText: Yamlet Logo
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+  - url: http://yamlet-service.yamlet.svc.cluster.local:8080
+    description: Kubernetes cluster service
+  - url: https://your-domain.com
+    description: Production server
+
+paths:
+  /health:
+    get:
+      summary: Health Check
+      description: Returns the health status of the Yamlet service
+      operationId: getHealth
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "OK"
+        '500':
+          description: Service is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /namespaces/{namespace}/configs:
+    get:
+      summary: List Configurations
+      description: List all configurations in a namespace
+      operationId: listConfigs
+      tags:
+        - Configuration
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: namespace
+          in: path
+          required: true
+          description: The namespace to list configurations from
+          schema:
+            type: string
+            example: "dev"
+      responses:
+        '200':
+          description: List of configurations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigList'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Token not authorized for namespace
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /namespaces/{namespace}/configs/{name}:
+    post:
+      summary: Store Configuration
+      description: Store a YAML configuration file in the specified namespace
+      operationId: storeConfig
+      tags:
+        - Configuration
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: namespace
+          in: path
+          required: true
+          description: The namespace to store the configuration in
+          schema:
+            type: string
+            example: "dev"
+        - name: name
+          in: path
+          required: true
+          description: The name of the configuration file
+          schema:
+            type: string
+            example: "app.yaml"
+      requestBody:
+        required: true
+        content:
+          application/x-yaml:
+            schema:
+              type: string
+              example: |
+                app: my-service
+                version: 1.2.0
+                environment: development
+                database:
+                  host: db.example.com
+                  port: 5432
+                  name: myapp_dev
+                features:
+                  debug: true
+                  logging: verbose
+          text/yaml:
+            schema:
+              type: string
+      responses:
+        '200':
+          description: Configuration stored successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Token not authorized for namespace
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    get:
+      summary: Get Configuration
+      description: Retrieve a YAML configuration file from the specified namespace
+      operationId: getConfig
+      tags:
+        - Configuration
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: namespace
+          in: path
+          required: true
+          description: The namespace to retrieve the configuration from
+          schema:
+            type: string
+            example: "dev"
+        - name: name
+          in: path
+          required: true
+          description: The name of the configuration file
+          schema:
+            type: string
+            example: "app.yaml"
+      responses:
+        '200':
+          description: Configuration retrieved successfully
+          content:
+            application/x-yaml:
+              schema:
+                type: string
+                example: |
+                  app: my-service
+                  version: 1.2.0
+                  environment: development
+                  database:
+                    host: db.example.com
+                    port: 5432
+            text/yaml:
+              schema:
+                type: string
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Token not authorized for namespace
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Configuration not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Delete Configuration
+      description: Delete a YAML configuration file from the specified namespace
+      operationId: deleteConfig
+      tags:
+        - Configuration
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: namespace
+          in: path
+          required: true
+          description: The namespace to delete the configuration from
+          schema:
+            type: string
+            example: "dev"
+        - name: name
+          in: path
+          required: true
+          description: The name of the configuration file
+          schema:
+            type: string
+            example: "app.yaml"
+      responses:
+        '200':
+          description: Configuration deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Token not authorized for namespace
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Configuration not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /admin/tokens:
+    get:
+      summary: List Tokens
+      description: List all tokens and their associated namespaces (admin only)
+      operationId: listTokens
+      tags:
+        - Admin
+      security:
+        - AdminAuth: []
+      responses:
+        '200':
+          description: List of tokens
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenList'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Admin token required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      summary: Create Token
+      description: Create a new token for a namespace (admin only)
+      operationId: createToken
+      tags:
+        - Admin
+      security:
+        - AdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTokenRequest'
+      responses:
+        '201':
+          description: Token created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateTokenResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Admin token required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Token already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /admin/tokens/{token}:
+    delete:
+      summary: Revoke Token
+      description: Revoke an existing token (admin only)
+      operationId: revokeToken
+      tags:
+        - Admin
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          description: The token to revoke
+          schema:
+            type: string
+            example: "old-token"
+      responses:
+        '200':
+          description: Token revoked successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevokeTokenResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Admin token required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Token not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token for namespace access
+    AdminAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Admin token for management operations
+
+  schemas:
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: "Authentication failed: invalid token"
+
+    ConfigList:
+      type: object
+      required:
+        - configs
+        - count
+        - namespace
+      properties:
+        configs:
+          type: array
+          items:
+            type: string
+          description: List of configuration names
+          example: ["app.yaml", "database.yaml", "features.yaml"]
+        count:
+          type: integer
+          description: Number of configurations
+          example: 3
+        namespace:
+          type: string
+          description: Namespace name
+          example: "dev"
+
+    StoreResponse:
+      type: object
+      required:
+        - message
+        - name
+        - namespace
+        - size
+      properties:
+        message:
+          type: string
+          description: Success message
+          example: "Config stored successfully"
+        name:
+          type: string
+          description: Configuration name
+          example: "app.yaml"
+        namespace:
+          type: string
+          description: Namespace name
+          example: "dev"
+        size:
+          type: integer
+          description: Size of stored configuration in bytes
+          example: 256
+
+    DeleteResponse:
+      type: object
+      required:
+        - message
+        - name
+        - namespace
+      properties:
+        message:
+          type: string
+          description: Success message
+          example: "Config deleted successfully"
+        name:
+          type: string
+          description: Configuration name
+          example: "app.yaml"
+        namespace:
+          type: string
+          description: Namespace name
+          example: "dev"
+
+    TokenList:
+      type: object
+      required:
+        - tokens
+        - count
+      properties:
+        tokens:
+          type: object
+          additionalProperties:
+            type: string
+          description: Map of tokens to namespaces
+          example:
+            "dev-token": "dev"
+            "test-token": "test"
+            "prod-token": "production"
+        count:
+          type: integer
+          description: Number of tokens
+          example: 3
+
+    CreateTokenRequest:
+      type: object
+      required:
+        - token
+        - namespace
+      properties:
+        token:
+          type: string
+          description: The token value
+          example: "new-production-token"
+          minLength: 8
+        namespace:
+          type: string
+          description: The namespace this token provides access to
+          example: "production"
+          pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+
+    CreateTokenResponse:
+      type: object
+      required:
+        - message
+        - token
+        - namespace
+      properties:
+        message:
+          type: string
+          description: Success message
+          example: "Token created successfully"
+        token:
+          type: string
+          description: The created token
+          example: "new-production-token"
+        namespace:
+          type: string
+          description: The namespace the token provides access to
+          example: "production"
+
+    RevokeTokenResponse:
+      type: object
+      required:
+        - message
+        - token
+      properties:
+        message:
+          type: string
+          description: Success message
+          example: "Token revoked successfully"
+        token:
+          type: string
+          description: The revoked token
+          example: "old-token"
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Configuration
+    description: YAML configuration management
+  - name: Admin
+    description: Administrative operations (token management)
+
+externalDocs:
+  description: Yamlet GitHub Repository
+  url: https://github.com/zvdy/yamlet
