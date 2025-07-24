@@ -49,6 +49,3 @@ k8s/secrets/
 # Temporary files
 tmp/
 temp/
-
-# temporarily ignore md files
-*.md

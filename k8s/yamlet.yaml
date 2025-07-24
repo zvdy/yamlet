@@ -17,8 +17,8 @@ spec:
     spec:
       containers:
       - name: yamlet
-        image: yamlet:latest
-        imagePullPolicy: IfNotPresent
+        image: zvdy/yamlet:0.0.1
+        imagePullPolicy: Always
         ports:
         - containerPort: 8080
         env:
