@@ -10,6 +10,11 @@ import (
 type Auth interface {
 	ValidateToken(namespace, token string) error
 	GetNamespaceForToken(token string) (string, error)
+	// Admin operations
+	IsAdminToken(token string) bool
+	CreateToken(adminToken, newToken, namespace string) error
+	RevokeToken(adminToken, tokenToRevoke string) error
+	ListAllTokens(adminToken string) (map[string]string, error)
 }
 
 // TokenAuth implements simple token-based authentication

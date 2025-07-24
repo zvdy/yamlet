@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"strings"
 
-	"zvdy/yamlet/internal/auth"
-	"zvdy/yamlet/internal/storage"
+	"github.com/zvdy/yamlet/internal/auth"
+	"github.com/zvdy/yamlet/internal/storage"
 
 	"github.com/gorilla/mux"
 )

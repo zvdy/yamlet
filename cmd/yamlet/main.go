@@ -8,9 +8,9 @@ import (
 	"os"
 	"strconv"
 
-	"zvdy/yamlet/internal/auth"
-	"zvdy/yamlet/internal/handlers"
-	"zvdy/yamlet/internal/storage"
+	"github.com/zvdy/yamlet/internal/auth"
+	"github.com/zvdy/yamlet/internal/handlers"
+	"github.com/zvdy/yamlet/internal/storage"
 
 	"github.com/gorilla/mux"
 )
