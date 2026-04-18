@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/zvdy/yamlet/internal/auth"
 	"github.com/zvdy/yamlet/internal/handlers"
@@ -61,10 +62,20 @@ func main() {
 	admin.HandleFunc("/tokens", h.ListTokens).Methods("GET")
 	admin.HandleFunc("/tokens/{token}", h.RevokeToken).Methods("DELETE")
 
-	// Start server
+	// Start server with explicit timeouts to mitigate slowloris and
+	// resource-exhaustion attacks.
 	addr := fmt.Sprintf(":%d", *port)
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           r,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20, // 1 MiB
+	}
 	log.Printf("Starting Yamlet server on %s", addr)
-	log.Fatal(http.ListenAndServe(addr, r))
+	log.Fatal(srv.ListenAndServe())
 }
 
 func getEnv(key, defaultValue string) string {
