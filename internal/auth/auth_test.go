@@ -1,7 +1,9 @@
 package auth
 
 import (
+	"errors"
 	"os"
+	"sync"
 	"testing"
 )
 
@@ -146,5 +148,85 @@ func TestAdminTokenManagement(t *testing.T) {
 	err = auth.ValidateToken("production", "new-prod-token")
 	if err == nil {
 		t.Fatal("Revoked token should not work")
+	}
+}
+
+// TestAuthSentinelErrors ensures callers can classify errors via errors.Is.
+func TestAuthSentinelErrors(t *testing.T) {
+	a := NewTokenAuth()
+
+	if err := a.ValidateToken("dev", "bogus"); !errors.Is(err, ErrInvalidToken) {
+		t.Fatalf("invalid token should yield ErrInvalidToken, got %v", err)
+	}
+
+	if err := a.ValidateToken("other", "dev-token"); !errors.Is(err, ErrNamespaceMismatch) {
+		t.Fatalf("wrong namespace should yield ErrNamespaceMismatch, got %v", err)
+	}
+
+	if err := a.CreateToken("not-admin", "x", "y"); !errors.Is(err, ErrAdminRequired) {
+		t.Fatalf("non-admin create should yield ErrAdminRequired, got %v", err)
+	}
+
+	if err := a.RevokeToken("admin-secret-token-change-me", "does-not-exist"); !errors.Is(err, ErrTokenNotFound) {
+		t.Fatalf("revoke missing should yield ErrTokenNotFound, got %v", err)
+	}
+
+	if err := a.CreateToken("admin-secret-token-change-me", "dev-token", "anything"); !errors.Is(err, ErrTokenExists) {
+		t.Fatalf("creating duplicate should yield ErrTokenExists, got %v", err)
+	}
+
+	if _, err := a.ListAllTokens("not-admin"); !errors.Is(err, ErrAdminRequired) {
+		t.Fatalf("non-admin list should yield ErrAdminRequired, got %v", err)
+	}
+}
+
+// TestTokenAuthConcurrent exercises concurrent create/revoke/validate under -race.
+// Without the internal mutex this test panics with a concurrent map read/write.
+func TestTokenAuthConcurrent(t *testing.T) {
+	a := NewTokenAuth()
+	admin := "admin-secret-token-change-me"
+
+	const workers = 64
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		go func(i int) {
+			defer wg.Done()
+			tok := "concurrent-token"
+			ns := "concurrent-ns"
+			_ = a.CreateToken(admin, tok, ns)
+			_, _ = a.GetNamespaceForToken(tok)
+			_ = a.ValidateToken(ns, tok)
+			_, _ = a.ListAllTokens(admin)
+			_ = a.RevokeToken(admin, tok)
+		}(i)
+	}
+	wg.Wait()
+}
+
+// TestCreateTokenAtomic verifies that concurrent CreateToken calls for the
+// same token result in exactly one success.
+func TestCreateTokenAtomic(t *testing.T) {
+	a := NewTokenAuth()
+	admin := "admin-secret-token-change-me"
+
+	const workers = 32
+	var wg sync.WaitGroup
+	var successes int32
+	var mu sync.Mutex
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		go func() {
+			defer wg.Done()
+			if err := a.CreateToken(admin, "race-token", "race-ns"); err == nil {
+				mu.Lock()
+				successes++
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+	if successes != 1 {
+		t.Fatalf("expected exactly 1 successful CreateToken, got %d", successes)
 	}
 }

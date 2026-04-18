@@ -1,9 +1,22 @@
 package auth
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
+	"sync"
+)
+
+// Sentinel errors for callers to classify via errors.Is.
+var (
+	ErrMissingToken      = errors.New("authorization token is required")
+	ErrInvalidToken      = errors.New("invalid token")
+	ErrNamespaceMismatch = errors.New("token not authorized for namespace")
+	ErrAdminRequired     = errors.New("admin token required")
+	ErrTokenExists       = errors.New("token already exists")
+	ErrTokenNotFound     = errors.New("token not found")
+	ErrInvalidInput      = errors.New("invalid input")
 )
 
 // Auth interface defines authentication operations
@@ -19,6 +32,7 @@ type Auth interface {
 
 // TokenAuth implements simple token-based authentication
 type TokenAuth struct {
+	mu         sync.RWMutex
 	tokens     map[string]string // token -> namespace
 	adminToken string            // special admin token
 }
@@ -81,57 +95,67 @@ func (t *TokenAuth) setDevelopmentTokens() {
 	}
 }
 
+// stripBearer removes a leading "Bearer " prefix if present.
+func stripBearer(token string) string {
+	return strings.TrimPrefix(token, "Bearer ")
+}
+
 // ValidateToken validates if a token is valid for the given namespace
 func (t *TokenAuth) ValidateToken(namespace, token string) error {
 	if token == "" {
-		return fmt.Errorf("authorization token is required")
+		return ErrMissingToken
 	}
+	token = stripBearer(token)
 
-	// Remove "Bearer " prefix if present
-	token = strings.TrimPrefix(token, "Bearer ")
-
+	t.mu.RLock()
 	allowedNamespace, exists := t.tokens[token]
+	t.mu.RUnlock()
+
 	if !exists {
-		return fmt.Errorf("invalid token")
+		return ErrInvalidToken
 	}
-
 	if allowedNamespace != namespace {
-		return fmt.Errorf("token not authorized for namespace %s", namespace)
+		return fmt.Errorf("%w: %s", ErrNamespaceMismatch, namespace)
 	}
-
 	return nil
 }
 
 // GetNamespaceForToken returns the namespace associated with a token
 func (t *TokenAuth) GetNamespaceForToken(token string) (string, error) {
 	if token == "" {
-		return "", fmt.Errorf("authorization token is required")
+		return "", ErrMissingToken
 	}
+	token = stripBearer(token)
 
-	// Remove "Bearer " prefix if present
-	token = strings.TrimPrefix(token, "Bearer ")
-
+	t.mu.RLock()
 	namespace, exists := t.tokens[token]
-	if !exists {
-		return "", fmt.Errorf("invalid token")
-	}
+	t.mu.RUnlock()
 
+	if !exists {
+		return "", ErrInvalidToken
+	}
 	return namespace, nil
 }
 
 // AddToken adds a new token for a namespace (useful for testing)
 func (t *TokenAuth) AddToken(token, namespace string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	t.tokens[token] = namespace
 }
 
 // RemoveToken removes a token (useful for testing)
 func (t *TokenAuth) RemoveToken(token string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	delete(t.tokens, token)
 }
 
 // ListTokens returns all configured tokens (for debugging, remove in production)
 func (t *TokenAuth) ListTokens() map[string]string {
-	tokens := make(map[string]string)
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	tokens := make(map[string]string, len(t.tokens))
 	for token, namespace := range t.tokens {
 		tokens[token] = namespace
 	}
@@ -142,29 +166,26 @@ func (t *TokenAuth) ListTokens() map[string]string {
 
 // IsAdminToken checks if the provided token is the admin token
 func (t *TokenAuth) IsAdminToken(token string) bool {
-	// Remove "Bearer " prefix if present
-	token = strings.TrimPrefix(token, "Bearer ")
-	return token == t.adminToken
+	return stripBearer(token) == t.adminToken
 }
 
 // CreateToken creates a new namespace token (admin only)
 func (t *TokenAuth) CreateToken(adminToken, newToken, namespace string) error {
 	if !t.IsAdminToken(adminToken) {
-		return fmt.Errorf("admin token required for token creation")
+		return ErrAdminRequired
 	}
-
 	if newToken == "" || namespace == "" {
-		return fmt.Errorf("token and namespace cannot be empty")
+		return fmt.Errorf("%w: token and namespace cannot be empty", ErrInvalidInput)
 	}
 
-	// Check if token already exists
-	if _, exists := t.tokens[newToken]; exists {
-		return fmt.Errorf("token already exists")
-	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
 
-	// Prevent creating admin token as namespace token
 	if newToken == t.adminToken {
-		return fmt.Errorf("cannot create token that conflicts with admin token")
+		return fmt.Errorf("%w: cannot create token conflicting with admin token", ErrInvalidInput)
+	}
+	if _, exists := t.tokens[newToken]; exists {
+		return ErrTokenExists
 	}
 
 	t.tokens[newToken] = namespace
@@ -174,20 +195,20 @@ func (t *TokenAuth) CreateToken(adminToken, newToken, namespace string) error {
 // RevokeToken removes a namespace token (admin only)
 func (t *TokenAuth) RevokeToken(adminToken, tokenToRevoke string) error {
 	if !t.IsAdminToken(adminToken) {
-		return fmt.Errorf("admin token required for token revocation")
+		return ErrAdminRequired
 	}
-
 	if tokenToRevoke == "" {
-		return fmt.Errorf("token to revoke cannot be empty")
+		return fmt.Errorf("%w: token to revoke cannot be empty", ErrInvalidInput)
 	}
 
-	// Prevent revoking admin token
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	if tokenToRevoke == t.adminToken {
-		return fmt.Errorf("cannot revoke admin token")
+		return fmt.Errorf("%w: cannot revoke admin token", ErrInvalidInput)
 	}
-
 	if _, exists := t.tokens[tokenToRevoke]; !exists {
-		return fmt.Errorf("token not found")
+		return ErrTokenNotFound
 	}
 
 	delete(t.tokens, tokenToRevoke)
@@ -197,10 +218,12 @@ func (t *TokenAuth) RevokeToken(adminToken, tokenToRevoke string) error {
 // ListAllTokens returns all configured tokens (admin only)
 func (t *TokenAuth) ListAllTokens(adminToken string) (map[string]string, error) {
 	if !t.IsAdminToken(adminToken) {
-		return nil, fmt.Errorf("admin token required for listing tokens")
+		return nil, ErrAdminRequired
 	}
 
-	tokens := make(map[string]string)
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	tokens := make(map[string]string, len(t.tokens))
 	for token, namespace := range t.tokens {
 		tokens[token] = namespace
 	}
